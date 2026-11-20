@@ -1,1 +1,1 @@
-# PMB Package
+"""Paket utama modul PMB SEVIMA-Mini."""

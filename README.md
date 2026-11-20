@@ -1,206 +1,138 @@
-# Sistem Modul PMB (Penerimaan Mahasiswa Baru) & NIM Generator Otomatis
+# SEVIMA-Mini — Modul PMB (Penerimaan Mahasiswa Baru)
 
-Proyek implementasi modul backend Penerimaan Mahasiswa Baru (PMB) untuk sistem akademik perguruan tinggi berbasis **FastAPI**, **SQLAlchemy**, dan **Alembic** dengan generator NIM otomatis yang **thread-safe** dan **idempotent**.
-
----
-
-## 📌 Fitur Utama
-
-1. **Database Schema & Constraints**:
-   - Tabel `program_studi` (id, kode 3 digit, nama, fakultas).
-   - Tabel `jalur_masuk` (id, kode, nama, keterangan).
-   - Tabel `calon_mahasiswa` (id, nama_lengkap, email, phone, tanggal_lahir, alamat, prodi_id, jalur_id, status, nim, created_at, approved_at).
-   - **Database Constraints**: `unique email`, validasi nomor telepon format Indonesia (`+62`, `62`, `08`), dan status enum (`pending`, `approved`, `rejected`).
-   - Skrip migrasi **Alembic** lengkap dengan fitur **rollback** (`upgrade` dan `downgrade`).
-
-2. **RESTful API Endpoints**:
-   - `POST /api/pmb/register`: Pendaftaran calon mahasiswa (status `pending`, status code 201).
-   - `GET /api/pmb/status/{id}`: Cek status pendaftaran calon mahasiswa.
-   - `PUT /api/pmb/approve/{id}`: Admin approval pendaftaran sekaligus auto-generate NIM unik.
-   - `GET /api/pmb/stats`: Dashboard statistik jumlah pendaftar (total, per status, per program studi, per jalur masuk).
-   - `GET /api/pmb/prodi` & `GET /api/pmb/jalur`: Master data program studi dan jalur seleksi.
-
-3. **NIM Generator Otomatis (Thread-Safe & Idempotent)**:
-   - Format: `[Tahun:4][Kode Prodi:3]-[Running Number:4]`
-   - Contoh: `2025001-0001` (Teknik Informatika pendaftar pertama).
-   - **Thread-Safe**: Menggunakan `threading.RLock` dan atomic query sequence untuk mencegah race conditions saat banyak request masuk secara bersamaan.
-   - **Idempotent**: Pemanggilan approval berulang pada mahasiswa yang sudah disetujui tidak akan mengubah NIM yang telah diterbitkan.
-
-4. **Web Portal UI & Swagger Documentation**:
-   - Form pendaftaran interaktif dan dashboard admin langsung di browser via `http://localhost:8000/`.
-   - Dokumentasi interaktif Swagger UI di `http://localhost:8000/docs` dan ReDoc di `http://localhost:8000/redoc`.
-
-5. **Unit Testing & Code Coverage**:
-   - 19 test case menggunakan `pytest` mencakup validasi input, duplikasi email, format telepon, konkurensi NIM, idempotency, dan migrasi database.
-   - **Test Coverage: 94%** (melampaui target minimal 80%).
+Implementasi tugas **Pemrograman Berorientasi Objek (Minggu 3–4)**: sistem pendaftaran calon mahasiswa baru dengan skema database tervalidasi, migrasi Alembic beserta rollback, state machine persetujuan (`pending` → `approved` / `rejected`), generator NIM otomatis yang idempotent serta aman dari *race condition*, dan pengujian otomatis dengan `pytest` (coverage **95.80%**).
 
 ---
 
-## 🛠️ Persyaratan Sistem
+## Fitur Utama
 
-- Python 3.10+ (Direkomendasikan Python 3.12)
-- Pip package manager
+1. **Database Schema & Alembic Migration (dengan Rollback):**
+   - 4 tabel: `program_studi`, `jalur_masuk` (`SNBP`, `SNBT`, `Mandiri`), `calon_mahasiswa`, dan `nim_counter`.
+   - Constraint di level DB: `UNIQUE` email, `UNIQUE` NIM, `CheckConstraint` format email, format nomor telepon Indonesia (`08...`, `628...`, `+628...`), enum status (`pending`/`approved`/`rejected`), dan batas counter `0..9999`.
+   - Dua revisi Alembic (`001_initial_pmb` & `002_nim_and_counter`) yang kompatibel dengan SQLite (`batch_alter_table`) maupun MySQL dan dapat di-rollback hingga `base`.
+2. **REST API Endpoints (`/api/pmb`):**
+   - `POST /api/pmb/register` — Mendaftarkan calon mahasiswa baru (`201 Created`, `400 Bad Request`, `409 Conflict`).
+   - `GET /api/pmb/status/{calon_id}` — Cek status pendaftaran & NIM dengan `response_model=StatusOut` (memfilter data pribadi sensitif).
+   - `PUT /api/pmb/approve/{calon_id}` — Menyetujui pendaftar (`pending` → `approved`), mencatat `approved_at` (UTC), dan generate NIM otomatis (`200 OK`, `400`, `404`, `409`).
+   - `PUT /api/pmb/reject/{calon_id}` — Menolak pendaftar (`pending` → `rejected`, terminal state).
+   - `GET /api/pmb/stats` — Dashboard statistik pendaftar (`total`, `per_status`, `per_prodi`, `per_jalur_masuk`) menggunakan agregasi SQL `GROUP BY` + `outerjoin`.
+3. **Arsitektur OOP (`PMBService`):**
+   - Seluruh aturan state machine, validasi bisnis, dan manajemen transaksi dienkapsulasi di `app/services/pmb_service.py`, bukan tersebar di lapisan router.
+4. **NIM Generator Aman (`app/services/nim_generator.py`):**
+   - Reset nomor urut otomatis per kombinasi `(tahun, kode_prodi)` dengan *zero-padding* 4 digit dan proteksi batas `> 9999`.
+   - **Idempotent 2 lapis:** cek status `APPROVED` di logika + `UNIQUE` constraint di kolom `nim`.
+   - **Anti Race Condition 3 lapis:** tabel `nim_counter` + `SELECT ... FOR UPDATE`, transaksi tunggal (`db.flush()` di generator, `db.commit()` di `PMBService.approve()`), dan retry otomatis (maks 3x) saat `IntegrityError`.
 
 ---
 
-## 🚀 Cara Menjalankan Aplikasi
+## Struktur Proyek
+
+```text
+sevima-mini-pmb/
+├── alembic.ini
+├── alembic/
+│   ├── env.py
+│   ├── script.py.mako
+│   └── versions/
+│       ├── 001_initial_pmb_schema.py      # Tabel dasar PMB + constraints + rollback
+│       └── 002_add_nim_and_counter.py     # Kolom nim (UNIQUE) + tabel nim_counter + rollback
+├── app/
+│   ├── database.py                        # Engine, SessionLocal, Base, get_db DI
+│   ├── models.py                          # SQLAlchemy 2.0 ORM Models & CheckConstraints
+│   ├── schemas.py                         # Pydantic v2 input/output schemas & phone validator
+│   ├── services/
+│   │   ├── nim_generator.py               # format_nim(), format_nim_display(), generate_nim()
+│   │   └── pmb_service.py                 # Class OOP PMBService (state machine & transaksi)
+│   ├── routers/
+│   │   └── pmb.py                         # FastAPI Router /api/pmb + dokumentasi Swagger
+│   ├── seed.py                            # Seeder idempotent master prodi & jalur masuk
+│   └── main.py                            # FastAPI app + custom 400 validation handler
+├── tests/
+│   ├── conftest.py                        # Fixture SQLite in-memory (StaticPool) + dependency_overrides
+│   ├── test_nim_unit.py                   # Unit tests murni (format NIM, phone, counter bounds)
+│   └── test_pmb_api.py                    # Integration tests (5 tes wajib + edge cases & guards)
+├── prompts/
+│   └── ai-usage-log.md                    # Dokumentasi penggunaan AI + OPAR
+├── .github/
+│   └── PULL_REQUEST_TEMPLATE.md           # Template Pull Request sesuai silabus
+├── pyproject.toml
+├── requirements.txt
+└── README.md
+```
+
+---
+
+## Keputusan Desain (ADR — Architecture Decision Records)
+
+Karena terdapat beberapa ambiguitas pada dokumen spesifikasi tugas, keputusan berikut ditetapkan secara eksplisit dan dikunci dengan *automated test*:
+
+### ADR-001: Format NIM 11 Digit Murni (`YYYYKKKXXXX`)
+- **Konteks:** Dokumen tugas menulis format `[Tahun:4][Kode Prodi:3][Running Number:4]` (`YYYY[KODE]XXXX`, 11 digit) namun contohnya memakai strip (`2025001-0001`, 12 karakter).
+- **Keputusan:** NIM disimpan dan dikembalikan oleh API dalam format **11 digit angka murni** tanpa strip (contoh: `20250010001`), karena konsisten dengan spesifikasi format, mudah divalidasi (`^\d{4}\d{3}\d{4}$`), dan mudah diurutkan. Helper presentasi `format_nim_display("20250010001") -> "2025001-0001"` disediakan jika UI/kartu mahasiswa memerlukan tanda strip.
+
+### ADR-002: HTTP `400 Bad Request` untuk Error Validasi Input
+- **Konteks:** Secara default FastAPI mengembalikan `422 Unprocessable Entity` ketika validasi Pydantic gagal, sedangkan spesifikasi Step 4 meminta `test_invalid_phone_format` mengembalikan `400`.
+- **Keputusan:** Memasang custom `@app.exception_handler(RequestValidationError)` di `app/main.py` agar kegagalan validasi request mengembalikan **`400 Bad Request`** dengan detail error Pydantic yang tetap informatif.
+
+### ADR-003: Kebijakan Approve Ulang (`approved` → `PUT /approve/{id}`)
+- **Konteks:** Pendaftar yang sudah berstatus `approved` dapat menerima permintaan approve ulang akibat klik ganda admin atau *auto-retry* klien.
+- **Keputusan:** Mengembalikan **`200 OK`** dengan **NIM lama** tanpa memanggil `generate_nim()` dan tanpa menaikkan counter `nim_counter` (sifat idempotent `PUT`). Sebaliknya, pendaftar berstatus `rejected` yang dicoba di-approve dikembalikan **`409 Conflict`**.
+
+### ADR-004: Concurrency Database (MySQL InnoDB vs SQLite)
+- **Konteks:** `threading.Lock()` di Python hanya berlaku dalam satu proses sehingga tidak aman untuk deployment multi-worker/multi-server.
+- **Keputusan:** Menggunakan penguncian berbasis database (`SELECT ... FOR UPDATE` pada `nim_counter` dan `calon_mahasiswa`) dalam satu transaksi tunggal (`db.flush()` di generator, `db.commit()` di `PMBService`) + `UNIQUE` constraint + retry.
+- **Limitasi:** Suite pengujian otomatis berjalan pada **SQLite in-memory** yang mengabaikan klausa `FOR UPDATE` (SQLite menggunakan database-level write lock). Pengujian konkurensi nyata pada **MySQL InnoDB** perlu dilakukan di lingkungan MySQL (atur env `DATABASE_URL=mysql+pymysql://user:pass@host/db`).
+
+---
+
+## Cara Menjalankan Proyek
 
 ### 1. Instalasi Dependensi
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Menjalankan Migrasi Database (Alembic)
-Untuk menerapkan skema database:
+### 2. Migrasi Database & Uji Rollback (Alembic)
 ```bash
-python -m alembic upgrade head
+# Terapkan seluruh migrasi (Minggu 3 + Minggu 4)
+alembic upgrade head
+
+# Uji rollback 1 versi atau kembali ke awal
+alembic downgrade -1
+alembic downgrade base
+
+# Naikkan kembali ke versi terbaru
+alembic upgrade head
 ```
 
-Untuk menguji fitur rollback database:
+### 3. Seed Data Master (Program Studi & Jalur Masuk)
 ```bash
-python -m alembic downgrade base
-python -m alembic upgrade head
+python -m app.seed
 ```
 
-### 3. Menjalankan Server API
-Jalankan server menggunakan Uvicorn:
+### 4. Jalankan Server & Buka Swagger UI
 ```bash
-python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+uvicorn app.main:app --reload
+```
+- **Swagger UI:** `http://127.0.0.1:8000/docs`
+- **ReDoc:** `http://127.0.0.1:8000/redoc`
+- **OpenAPI JSON:** `http://127.0.0.1:8000/openapi.json`
+
+### 5. Jalankan Pengujian & Cek Coverage (Target ≥ 80%)
+```bash
+pytest -v --cov=app --cov-report=term-missing --cov-fail-under=80
 ```
 
-Buka di browser:
-- **Web Portal PMB**: [http://localhost:8000/](http://localhost:8000/)
-- **Swagger UI API Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
-- **ReDoc API Docs**: [http://localhost:8000/redoc](http://localhost:8000/redoc)
+**Hasil Verifikasi Terakhir:**
+- **43 passed** dalam `2.87s`
+- **Total Coverage:** `95.80%` (melampaui batas minimal `80%`)
+- **Alembic Upgrade & Rollback:** `base → 001_initial_pmb → 002_nim_and_counter → 001_initial_pmb → base → head` lulus tanpa error.
 
 ---
 
-## 🧪 Menjalankan Unit Tests & Coverage Report
+## Ringkasan Persiapan Viva (Tanpa AI)
 
-Jalankan seluruh test suite dengan mengukur coverage:
-```bash
-python -m pytest --cov=app tests/ -v
-```
-
-Hasil coverage:
-```text
-Name                            Stmts   Miss  Cover
----------------------------------------------------
-app\config.py                       7      0   100%
-app\database.py                    12      4    67%
-app\main.py                        52      7    87%
-app\models\__init__.py              4      0   100%
-app\models\calon_mahasiswa.py      34      1    97%
-app\models\jalur_masuk.py          12      1    92%
-app\models\program_studi.py        12      1    92%
-app\routers\pmb.py                 34      0   100%
-app\schemas\__init__.py             2      0   100%
-app\schemas\pmb.py                 73      1    99%
-app\services\nim_generator.py      21      3    86%
-app\services\pmb_service.py        66      3    95%
----------------------------------------------------
-TOTAL                             329     21    94%
-```
-
----
-
-## 📂 Struktur Direktori Proyek
-
-```
-TUGAS PEMOGRAMAN/
-├── alembic/
-│   ├── env.py                             # Konfigurasi runtime migrasi
-│   ├── script.py.mako                     # Template generasi script migrasi
-│   └── versions/
-│       └── 001_initial_pmb_schema.py      # DDL skema PMB (upgrade & downgrade)
-├── alembic.ini                            # Konfigurasi database Alembic
-├── app/
-│   ├── __init__.py
-│   ├── config.py                          # Konfigurasi aplikasi & database
-│   ├── database.py                        # Engine, declarative base, & get_db DI
-│   ├── main.py                            # Entrypoint FastAPI, exception handlers, static mount
-│   ├── models/                            # SQLAlchemy ORM Models
-│   │   ├── __init__.py
-│   │   ├── calon_mahasiswa.py             # Model tabel calon mahasiswa + constraints
-│   │   ├── jalur_masuk.py                 # Model tabel master jalur masuk
-│   │   └── program_studi.py               # Model tabel master program studi
-│   ├── schemas/                           # Pydantic Schemas & Validators
-│   │   ├── __init__.py
-│   │   └── pmb.py                         # DTO untuk Request & Response PMB
-│   ├── services/                          # Business Logic Services
-│   │   ├── __init__.py
-│   │   ├── nim_generator.py               # Algoritma Thread-Safe NIM Generator
-│   │   └── pmb_service.py                 # Registrasi, Approval, dan Statistik
-│   ├── routers/                           # API Route Handlers
-│   │   ├── __init__.py
-│   │   └── pmb.py                         # Endpoint /register, /status, /approve, /stats
-│   └── static/
-│       └── index.html                     # Portal Web UI interaktif pendaftaran & dashboard
-├── tests/
-│   ├── __init__.py
-│   ├── conftest.py                        # Fixtures database in-memory & test client
-│   ├── test_migrations.py                 # Pengujian migrasi upgrade & rollback
-│   ├── test_nim_generator.py              # Pengujian format NIM, sequence, & konkurensi
-│   └── test_pmb.py                        # Pengujian endpoints, error handling, idempotency
-├── AI_USAGE_LOG.md                        # Log prompt & arsitektur AI
-├── README.md                              # Dokumentasi lengkap proyek
-└── requirements.txt                       # Daftar dependensi Python
-```
-
----
-
-## 📋 Contoh Payload API
-
-### 1. Registrasi Mahasiswa Baru
-- **Method**: `POST`
-- **URL**: `/api/pmb/register`
-- **Request Body**:
-```json
-{
-  "nama_lengkap": "Dewi Sartika",
-  "email": "dewi.sartika@example.com",
-  "phone": "081234567890",
-  "tanggal_lahir": "2005-04-12",
-  "alamat": "Jl. Merdeka No. 45, Jakarta",
-  "program_studi_id": 1,
-  "jalur_masuk": "SNBP"
-}
-```
-- **Response (201 Created)**:
-```json
-{
-  "id": 1,
-  "nama_lengkap": "Dewi Sartika",
-  "email": "dewi.sartika@example.com",
-  "phone": "081234567890",
-  "tanggal_lahir": "2005-04-12",
-  "alamat": "Jl. Merdeka No. 45, Jakarta",
-  "program_studi_id": 1,
-  "jalur_masuk": "SNBP",
-  "status": "pending",
-  "nim": null,
-  "created_at": "2026-11-19T12:00:00",
-  "approved_at": null,
-  "program_studi": {
-    "kode": "001",
-    "nama": "Teknik Informatika",
-    "fakultas": "Fakultas Ilmu Komputer",
-    "id": 1
-  }
-}
-```
-
-### 2. Admin Approve & Auto Generate NIM
-- **Method**: `PUT`
-- **URL**: `/api/pmb/approve/1`
-- **Response (200 OK)**:
-```json
-{
-  "id": 1,
-  "nama_lengkap": "Dewi Sartika",
-  "status": "approved",
-  "nim": "2026001-0001",
-  "approved_at": "2026-11-19T12:05:00",
-  "message": "Pendaftaran berhasil disetujui dan NIM berhasil digenerate."
-}
-```
+1. **Penanganan *race condition*:** 3 lapis — tabel `nim_counter` dengan `SELECT ... FOR UPDATE` agar transaksi paralel mengantre, satu transaksi atomik (`flush()` di `generate_nim`, `commit()` di `PMBService.approve()`), dan `UNIQUE` constraint pada `nim` + retry `IntegrityError`.
+2. **Alasan kunci di database (bukan `threading.Lock()`):** `threading.Lock()` hanya mengunci thread di dalam 1 proses Python; pada server multi-worker (Uvicorn/Gunicorn) tiap worker memiliki lock sendiri. Database adalah satu-satunya *shared state* lintas worker.
+3. **Kapan kunci dilepas:** Saat transaksi ditutup oleh `db.commit()` atau `db.rollback()`. Karena itu `generate_nim()` sengaja hanya memakai `db.flush()`.
+4. **Jika transaksi gagal di tengah jalan:** Seluruh transaksi di-`rollback` otomatis sehingga `last_number` di `nim_counter` kembali ke angka semula, status pendaftar tetap `pending`, dan tidak terjadi nomor NIM yang bolong.

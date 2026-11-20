@@ -1,98 +1,110 @@
-from typing import List, Dict, Any
+"""Endpoint REST API untuk modul PMB (Penerimaan Mahasiswa Baru)."""
+
+from __future__ import annotations
+
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models.program_studi import ProgramStudi
-from app.models.jalur_masuk import JalurMasuk
-from app.schemas.pmb import (
-    CalonMahasiswaCreate,
-    CalonMahasiswaResponse,
-    ApproveResponse,
-    StatsResponse,
-    ProgramStudiResponse,
-    JalurMasukResponse
-)
-from app.services.pmb_service import (
-    register_calon_mahasiswa,
-    get_calon_mahasiswa_by_id,
-    approve_calon_mahasiswa,
-    get_pmb_statistics
-)
+from app.schemas import ApproveOut, RegisterIn, RegisterOut, RejectOut, StatsOut, StatusOut
+from app.services.pmb_service import PMBService
 
-router = APIRouter(tags=["Penerimaan Mahasiswa Baru (PMB)"])
+router = APIRouter(prefix="/api/pmb", tags=["PMB"])
+
+
+def get_pmb_service(db: Session = Depends(get_db)) -> PMBService:
+    """Dependency Injection untuk menyediakan instance PMBService per request."""
+    return PMBService(db)
+
 
 @router.post(
     "/register",
-    response_model=CalonMahasiswaResponse,
+    response_model=RegisterOut,
     status_code=status.HTTP_201_CREATED,
-    summary="Daftar Calon Mahasiswa Baru",
-    description="Mendaftarkan calon mahasiswa baru dengan validasi data email, nomor HP Indonesia, prodi, dan jalur masuk."
+    summary="Daftar calon mahasiswa baru",
+    description="Mendaftarkan calon mahasiswa dengan status awal `pending` setelah validasi input.",
+    responses={
+        400: {"description": "Data input tidak valid (format email/telepon atau prodi/jalur tidak valid)"},
+        409: {"description": "Email sudah terdaftar"},
+    },
 )
-def register(data: CalonMahasiswaCreate, db: Session = Depends(get_db)):
-    calon = register_calon_mahasiswa(data=data, db=db)
-    return calon
+def register_calon_mahasiswa(
+    payload: RegisterIn,
+    service: PMBService = Depends(get_pmb_service),
+) -> RegisterOut:
+    """Endpoint pendaftaran calon mahasiswa baru."""
+    return service.register(payload)
+
 
 @router.get(
     "/status/{calon_id}",
-    response_model=CalonMahasiswaResponse,
-    summary="Cek Status Pendaftaran",
-    description="Melihat data pendaftaran dan status calon mahasiswa berdasarkan ID pendaftar."
+    response_model=StatusOut,
+    status_code=status.HTTP_200_OK,
+    summary="Cek status pendaftaran",
+    description="Mengembalikan status pendaftaran dan NIM (jika sudah approved) tanpa mengekspos data pribadi.",
+    responses={
+        404: {"description": "Pendaftar tidak ditemukan"},
+    },
 )
-def get_status(calon_id: int, db: Session = Depends(get_db)):
-    calon = get_calon_mahasiswa_by_id(calon_id=calon_id, db=db)
-    return calon
+def get_registration_status(
+    calon_id: int,
+    service: PMBService = Depends(get_pmb_service),
+) -> StatusOut:
+    """Endpoint cek status pendaftaran calon mahasiswa."""
+    return service.get_status(calon_id)
+
 
 @router.put(
     "/approve/{calon_id}",
-    response_model=ApproveResponse,
-    summary="Approve Pendaftaran & Generate NIM",
-    description="Admin menyetujui pendaftaran calon mahasiswa dan menghasilkan NIM institusional unik secara otomatis (idempotent)."
+    response_model=ApproveOut,
+    status_code=status.HTTP_200_OK,
+    summary="Approve pendaftar & generate NIM",
+    description=(
+        "Menyetujui pendaftar berstatus `pending` menjadi `approved`, mencatat `approved_at` (UTC), "
+        "dan menghasilkan NIM secara atomik & idempotent."
+    ),
+    responses={
+        400: {"description": "Data pendaftar tidak valid untuk pembuatan NIM (mis. kode prodi bukan 3 digit)"},
+        404: {"description": "Pendaftar tidak ditemukan"},
+        409: {"description": "Status bukan pending (sudah rejected) atau konflik concurrency"},
+    },
 )
-def approve_registration(calon_id: int, db: Session = Depends(get_db)):
-    calon = approve_calon_mahasiswa(calon_id=calon_id, db=db)
-    return ApproveResponse(
-        id=calon.id,
-        nama_lengkap=calon.nama_lengkap,
-        status=calon.status.value if hasattr(calon.status, "value") else str(calon.status),
-        nim=calon.nim,
-        approved_at=calon.approved_at,
-        message="Pendaftaran berhasil disetujui dan NIM berhasil digenerate."
-    )
+def approve_calon_mahasiswa(
+    calon_id: int,
+    service: PMBService = Depends(get_pmb_service),
+) -> ApproveOut:
+    """Endpoint admin untuk menyetujui pendaftar dan meng-generate NIM."""
+    return service.approve(calon_id)
+
+
+@router.put(
+    "/reject/{calon_id}",
+    response_model=RejectOut,
+    status_code=status.HTTP_200_OK,
+    summary="Reject pendaftar",
+    description="Menolak pendaftar berstatus `pending` menjadi `rejected` (terminal state).",
+    responses={
+        404: {"description": "Pendaftar tidak ditemukan"},
+        409: {"description": "Pendaftar sudah approved sehingga tidak dapat ditolak"},
+    },
+)
+def reject_calon_mahasiswa(
+    calon_id: int,
+    service: PMBService = Depends(get_pmb_service),
+) -> RejectOut:
+    """Endpoint admin untuk menolak pendaftar."""
+    return service.reject(calon_id)
+
 
 @router.get(
     "/stats",
-    response_model=StatsResponse,
-    summary="Dashboard Statistik PMB",
-    description="Menampilkan statistik jumlah pendaftar keseluruhan, per status, per program studi, dan per jalur masuk."
+    response_model=StatsOut,
+    status_code=status.HTTP_200_OK,
+    summary="Dashboard statistik jumlah pendaftar",
+    description="Menampilkan total pendaftar, rincian per status, per program studi, dan per jalur masuk.",
 )
-def get_stats(db: Session = Depends(get_db)):
-    return get_pmb_statistics(db=db)
-
-@router.get(
-    "/prodi",
-    response_model=List[ProgramStudiResponse],
-    summary="Daftar Program Studi",
-    description="Mengambil daftar program studi yang tersedia."
-)
-def list_prodi(db: Session = Depends(get_db)):
-    return db.query(ProgramStudi).order_by(ProgramStudi.kode.asc()).all()
-
-@router.get(
-    "/jalur",
-    response_model=List[JalurMasukResponse],
-    summary="Daftar Jalur Masuk",
-    description="Mengambil daftar jalur masuk yang tersedia (SNBP, SNBT, Mandiri)."
-)
-def list_jalur(db: Session = Depends(get_db)):
-    return db.query(JalurMasuk).order_by(JalurMasuk.id.asc()).all()
-
-@router.get(
-    "/list",
-    response_model=List[CalonMahasiswaResponse],
-    summary="Daftar Seluruh Calon Mahasiswa",
-    description="Mengambil seluruh calon mahasiswa yang telah mendaftar."
-)
-def list_all(db: Session = Depends(get_db)):
-    from app.models.calon_mahasiswa import CalonMahasiswa
-    return db.query(CalonMahasiswa).order_by(CalonMahasiswa.id.desc()).all()
+def get_pmb_stats(
+    service: PMBService = Depends(get_pmb_service),
+) -> StatsOut:
+    """Endpoint dashboard statistik pendaftar PMB."""
+    return service.get_stats()
