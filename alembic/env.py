@@ -1,33 +1,28 @@
-import os
-import sys
+"""Konfigurasi Alembic environment untuk SEVIMA-Mini."""
+
+from __future__ import annotations
+
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
-
 from alembic import context
+from sqlalchemy import engine_from_config, pool
 
-# Tambahkan direktori root ke sys.path
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+from app.database import get_database_url
+from app.models import Base
 
-from app.database import Base
-from app.models import ProgramStudi, JalurMasuk, CalonMahasiswa
-
-# this is the Alembic Config object, which provides
-# access to the values within the .ini file in use.
 config = context.config
 
-# Interpret the config file for Python logging.
-# This line sets up loggers basically.
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# add your model's MetaData object here
-# for 'autogenerate' support
+# Gunakan DATABASE_URL dari environment jika tersedia (SQLite / MySQL)
+config.set_main_option("sqlalchemy.url", get_database_url())
+
 target_metadata = Base.metadata
 
+
 def run_migrations_offline() -> None:
-    """Run migrations in 'offline' mode."""
+    """Jalankan migrasi dalam mode offline (menghasilkan SQL)."""
     url = config.get_main_option("sqlalchemy.url")
     context.configure(
         url=url,
@@ -39,8 +34,9 @@ def run_migrations_offline() -> None:
     with context.begin_transaction():
         context.run_migrations()
 
+
 def run_migrations_online() -> None:
-    """Run migrations in 'online' mode."""
+    """Jalankan migrasi langsung terhadap database aktif."""
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
@@ -50,11 +46,13 @@ def run_migrations_online() -> None:
     with connectable.connect() as connection:
         context.configure(
             connection=connection,
-            target_metadata=target_metadata
+            target_metadata=target_metadata,
+            render_as_batch=connection.dialect.name == "sqlite",
         )
 
         with context.begin_transaction():
             context.run_migrations()
+
 
 if context.is_offline_mode():
     run_migrations_offline()

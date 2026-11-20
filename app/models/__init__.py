@@ -1,5 +1,17 @@
-from app.models.program_studi import ProgramStudi
-from app.models.jalur_masuk import JalurMasuk
-from app.models.calon_mahasiswa import CalonMahasiswa, StatusPendaftaran
+"""Ekspos seluruh model ORM agar otomatis terdaftar di Base.metadata."""
 
-__all__ = ["ProgramStudi", "JalurMasuk", "CalonMahasiswa", "StatusPendaftaran"]
+from app.models.base import Base
+from app.models.krs import KRS, KRSDetail, KRSStatus, MataKuliah, SkalaNilai, prerequisite
+from app.models.pmb import CalonMahasiswa, PMBStatus
+
+__all__ = [
+    "Base",
+    "CalonMahasiswa",
+    "PMBStatus",
+    "KRS",
+    "KRSDetail",
+    "KRSStatus",
+    "MataKuliah",
+    "SkalaNilai",
+    "prerequisite",
+]

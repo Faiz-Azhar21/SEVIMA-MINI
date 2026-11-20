@@ -1,0 +1,1 @@
+"""API routers SEVIMA-Mini."""

@@ -1,28 +1,23 @@
-# Python
+# Python artifacts
 __pycache__/
 *.py[cod]
 *$py.class
-*.so
-.Python
-env/
-venv/
-ENV/
-
-# Database
-*.db
-*.sqlite3
-
-# Testing & Coverage
 .pytest_cache/
 .coverage
 htmlcov/
+.venv/
+venv/
 
-# Environment & IDE
+# Local SQLite database
+*.db
+*.sqlite3
+
+# Lecture source materials (large binary/PDF files)
+*.mp4
+1795160486.pdf
+
+# IDE / OS
 .vscode/
 .idea/
-*.swp
-*.swo
-
-# OS
+.DS_Store
 Thumbs.db
-Desktop.ini
