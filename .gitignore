@@ -1,0 +1,29 @@
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Testing & coverage artifacts
+.pytest_cache/
+.hypothesis/
+.coverage
+htmlcov/
+
+# Local SQLite database
+*.db
+*.sqlite3
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE & OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# File materi kuliah (besar / non-kode)
+Materi 3 Minggu 6.mp4
+1795160486.pdf
