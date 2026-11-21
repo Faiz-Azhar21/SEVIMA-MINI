@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SEVIMA-Mini — Input Nilai &amp; Audit Trail</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #1e293b;
+      --border: #334155;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --accent: #f59e0b;
+      --ok: #22c55e;
+      --err: #ef4444;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 24px;
+    }
+    .container { max-width: 980px; margin: 0 auto; }
+    h1 { margin: 0 0 6px; font-size: 1.5rem; }
+    .subtitle { color: var(--muted); margin: 0 0 20px; font-size: 0.92rem; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 18px;
+      margin-bottom: 18px;
+    }
+    .controls {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      align-items: end;
+    }
+    label { display: block; font-size: 0.82rem; color: var(--muted); margin-bottom: 4px; }
+    select, input[type="text"], button {
+      background: #0f172a;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-size: 0.9rem;
+    }
+    button {
+      background: var(--accent);
+      color: #0f172a;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+    }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    button.secondary { background: #334155; color: var(--text); }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td {
+      text-align: left;
+      padding: 10px 8px;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.9rem;
+    }
+    th { color: var(--muted); font-weight: 600; }
+    .locked { color: var(--err); font-size: 0.84rem; font-style: italic; }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #0f172a;
+      border: 1px solid var(--border);
+      font-family: ui-monospace, monospace;
+      font-size: 0.82rem;
+    }
+    .notice {
+      padding: 10px 12px;
+      border-radius: 8px;
+      margin-bottom: 14px;
+      display: none;
+      font-size: 0.9rem;
+    }
+    .notice.ok { display: block; background: rgba(34, 197, 94, 0.15); border: 1px solid var(--ok); }
+    .notice.err { display: block; background: rgba(239, 68, 68, 0.15); border: 1px solid var(--err); }
+    .note { color: var(--muted); font-size: 0.82rem; margin-top: 8px; }
+    .inline-form { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>SEVIMA-Mini — Input Nilai Dosen &amp; Audit Trail</h1>
+    <p class="subtitle">
+      Materi 5 Minggu 9 · Guard: hanya dosen pengampu &amp; presensi &ge; 75% · Perubahan nilai wajib disertai alasan.
+    </p>
+
+    <div id="notice" class="notice"></div>
+
+    <div class="card">
+      <div class="controls">
+        <div>
+          <label for="dosenSelect">Login sebagai Dosen (Header <code>X-Dosen-Id</code>)</label>
+          <select id="dosenSelect"></select>
+        </div>
+        <div>
+          <label for="kelasSelect">Pilih Kelas</label>
+          <select id="kelasSelect"></select>
+        </div>
+        <div>
+          <button id="reloadBtn" class="secondary" type="button">Muat Ulang</button>
+        </div>
+      </div>
+      <p id="pengampuInfo" class="note"></p>
+    </div>
+
+    <div class="card">
+      <h2 id="kelasTitle" style="margin:0 0 8px; font-size:1.1rem;">Daftar Peserta Kelas</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>NIM</th>
+            <th>Nama</th>
+            <th>Presensi</th>
+            <th>IPK Live</th>
+            <th>Nilai &amp; Alasan</th>
+            <th>Riwayat</th>
+          </tr>
+        </thead>
+        <tbody id="pesertaBody">
+          <tr><td colspan="6" style="color:var(--muted);">Memuat data...</td></tr>
+        </tbody>
+      </table>
+      <p class="note">
+        Catatan: Penguncian baris presensi &lt; 75% di form hanyalah kenyamanan UI; penjaga sebenarnya tetap ditegakkan di <code>GradeService</code>.
+      </p>
+    </div>
+
+    <div class="card">
+      <h2 id="riwayatTitle" style="margin:0 0 8px; font-size:1.1rem;">Audit Trail (View <code>v_riwayat_nilai</code>)</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Waktu (UTC)</th>
+            <th>MK</th>
+            <th>Lama &rarr; Baru</th>
+            <th>Pengubah</th>
+            <th>Alasan</th>
+          </tr>
+        </thead>
+        <tbody id="riwayatBody">
+          <tr><td colspan="5" style="color:var(--muted);">Klik tombol "Lihat" pada salah satu mahasiswa.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const HURUF_OPTIONS = ["A", "B", "C", "D", "E"];
+    let kelasCache = [];
+
+    function showNotice(msg, isError = false) {
+      const el = document.getElementById("notice");
+      el.textContent = msg;
+      el.className = "notice " + (isError ? "err" : "ok");
+    }
+
+    async function init() {
+      const [dosenRes, kelasRes] = await Promise.all([
+        fetch("/api/dosen"),
+        fetch("/api/kelas"),
+      ]);
+      const dosenList = await dosenRes.json();
+      kelasCache = await kelasRes.json();
+
+      const dosenSelect = document.getElementById("dosenSelect");
+      dosenSelect.innerHTML = dosenList
+        .map(d => `<option value="${d.id}">${d.nama} (ID ${d.id})</option>`)
+        .join("");
+
+      const kelasSelect = document.getElementById("kelasSelect");
+      kelasSelect.innerHTML = kelasCache
+        .map(k => `<option value="${k.id}">${k.nama_kelas} — ${k.semester} (${k.kode_mk})</option>`)
+        .join("");
+
+      // Pilih Basis Data A (id 5) jika ada agar cocok dengan mockup perkuliahan
+      if (kelasCache.some(k => k.id === 5)) {
+        kelasSelect.value = "5";
+      }
+
+      dosenSelect.addEventListener("change", updatePengampuInfo);
+      kelasSelect.addEventListener("change", loadPeserta);
+      document.getElementById("reloadBtn").addEventListener("click", loadPeserta);
+
+      await loadPeserta();
+    }
+
+    function updatePengampuInfo() {
+      const kelasId = Number(document.getElementById("kelasSelect").value);
+      const dosenId = Number(document.getElementById("dosenSelect").value);
+      const kelas = kelasCache.find(k => k.id === kelasId);
+      const info = document.getElementById("pengampuInfo");
+      if (!kelas) return;
+      const isPengampu = kelas.dosen_ids.includes(dosenId);
+      info.textContent = `Pengampu kelas ini: ${kelas.dosen_nama.join(", ")}. Status Anda: ${
+        isPengampu ? "Dosen Pengampu (diizinkan)" : "Bukan Pengampu (simpan akan ditolak HTTP 403)"
+      }.`;
+    }
+
+    async function loadPeserta() {
+      const kelasId = Number(document.getElementById("kelasSelect").value);
+      const kelas = kelasCache.find(k => k.id === kelasId);
+      document.getElementById("kelasTitle").textContent = kelas
+        ? `${kelas.nama_kelas} (${kelas.kode_mk} · Semester ${kelas.semester})`
+        : "Daftar Peserta Kelas";
+      updatePengampuInfo();
+
+      const res = await fetch(`/api/kelas/${kelasId}/peserta`);
+      const peserta = await res.json();
+      const tbody = document.getElementById("pesertaBody");
+
+      if (!peserta.length) {
+        tbody.innerHTML = `<tr><td colspan="6" style="color:var(--muted);">Belum ada peserta di kelas ini.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = "";
+      for (const p of peserta) {
+        const tr = document.createElement("tr");
+        const nilaiLama = p.nilai ?? "";
+        const disabledAttr = p.terkunci ? "disabled" : "";
+        const optionsHtml = [
+          `<option value="">-- pilih --</option>`,
+          ...HURUF_OPTIONS.map(h => `<option value="${h}" ${h === nilaiLama ? "selected" : ""}>${h}</option>`),
+        ].join("");
+
+        const editorHtml = p.terkunci
+          ? `<span class="locked">${p.alasan_terkunci}</span>`
+          : `<div class="inline-form">
+               <select id="huruf-${p.nim}" ${disabledAttr}>${optionsHtml}</select>
+               <input id="alasan-${p.nim}" type="text" placeholder="${
+                 nilaiLama ? `Alasan wajib (ubah ${nilaiLama} -> ...)` : "Alasan (opsional input awal)"
+               }" size="24" />
+               <button type="button" onclick="simpanNilai('${p.nim}', '${nilaiLama}')">Simpan</button>
+             </div>`;
+
+        tr.innerHTML = `
+          <td><code>${p.nim}</code></td>
+          <td>${p.nama}</td>
+          <td>${p.presensi}</td>
+          <td><span class="badge" id="ipk-${p.nim}">${p.ipk_saat_ini}</span></td>
+          <td>${editorHtml}</td>
+          <td><button type="button" class="secondary" onclick="loadRiwayat('${p.nim}', '${p.nama}')">Lihat</button></td>
+        `;
+        tbody.appendChild(tr);
+      }
+    }
+
+    async function simpanNilai(nim, nilaiLama) {
+      const kelasId = Number(document.getElementById("kelasSelect").value);
+      const dosenId = Number(document.getElementById("dosenSelect").value);
+      const huruf = document.getElementById(`huruf-${nim}`).value;
+      const alasan = document.getElementById(`alasan-${nim}`).value;
+
+      if (!huruf) {
+        showNotice("Pilih huruf nilai (A-E) terlebih dahulu.", true);
+        return;
+      }
+      if (nilaiLama && huruf !== nilaiLama && !alasan.trim()) {
+        showNotice(`Mengubah nilai ${nilaiLama} ke ${huruf} wajib menyertakan alasan.`, true);
+        return;
+      }
+
+      const res = await fetch(`/api/kelas/${kelasId}/nilai/${nim}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Dosen-Id": String(dosenId),
+        },
+        body: JSON.stringify({ huruf, alasan: alasan.trim() || null }),
+      });
+
+      const body = await res.json();
+      if (!res.ok) {
+        showNotice(`Gagal (HTTP ${res.status}): ${body.detail || JSON.stringify(body)}`, true);
+        return;
+      }
+
+      showNotice(`Nilai ${nim} (${body.kode_mk}) berhasil disimpan menjadi ${body.huruf}.`);
+      await loadPeserta();
+      await loadRiwayat(nim, nim);
+    }
+
+    async function loadRiwayat(nim, label) {
+      document.getElementById("riwayatTitle").innerHTML =
+        `Audit Trail — <code>${nim}</code> (${label}) via <code>v_riwayat_nilai</code>`;
+      const res = await fetch(`/api/mahasiswa/${nim}/riwayat-nilai`);
+      const rows = await res.json();
+      const tbody = document.getElementById("riwayatBody");
+      if (!rows.length) {
+        tbody.innerHTML = `<tr><td colspan="5" style="color:var(--muted);">Belum ada catatan riwayat nilai.</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = rows
+        .map(
+          r => `<tr>
+            <td><code>${r.changed_at}</code></td>
+            <td>${r.kode_mk} — ${r.nama_mk} (${r.semester})</td>
+            <td><span class="badge">${r.old_value ?? "NULL"} &rarr; ${r.new_value}</span></td>
+            <td>${r.pengubah}</td>
+            <td>${r.reason ?? "-"}</td>
+          </tr>`
+        )
+        .join("");
+    }
+
+    init();
+  </script>
+</body>
+</html>
