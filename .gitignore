@@ -1,0 +1,27 @@
+# Python & pytest
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual environments & secrets
+.venv/
+venv/
+.env
+.env.*
+
+# Local SQLite database
+*.db
+*.sqlite3
+
+# File materi/video kuliah lokal (tidak ikut di-commit)
+*.mp4
+1795170034.pdf
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

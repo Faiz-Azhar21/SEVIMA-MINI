@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SEVIMA-Mini · Conflict Resolver &amp; Jadwal Dashboard</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #1e293b;
+      --card-2: #162033;
+      --border: #334155;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --accent: #f59e0b;
+      --blue: #38bdf8;
+      --green: #22c55e;
+      --red: #ef4444;
+      --purple: #a78bfa;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+    header {
+      padding: 1.25rem 2rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+      background: #0b1120;
+    }
+    header h1 { margin: 0; font-size: 1.3rem; }
+    header h1 span { color: var(--accent); }
+    .subtitle { color: var(--muted); font-size: 0.85rem; }
+    main { max-width: 1280px; margin: 0 auto; padding: 1.5rem; display: grid; gap: 1.25rem; }
+    .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
+    .kpi {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem 1.25rem;
+    }
+    .kpi .label { color: var(--muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; }
+    .kpi .val { font-size: 1.8rem; font-weight: 700; margin-top: 0.25rem; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem;
+    }
+    .card h2 {
+      margin: 0 0 0.75rem;
+      font-size: 1.05rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(480px, 1fr)); gap: 1.25rem; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+    th, td { padding: 0.6rem 0.7rem; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+    th { color: var(--muted); font-weight: 600; font-size: 0.78rem; text-transform: uppercase; }
+    .badge {
+      display: inline-block;
+      padding: 0.15rem 0.5rem;
+      border-radius: 999px;
+      font-size: 0.74rem;
+      font-weight: 600;
+    }
+    .badge-red { background: rgba(239, 68, 68, 0.2); color: #fca5a5; }
+    .badge-amber { background: rgba(245, 158, 11, 0.2); color: #fcd34d; }
+    .badge-green { background: rgba(34, 197, 94, 0.2); color: #86efac; }
+    .badge-blue { background: rgba(56, 189, 248, 0.2); color: #7dd3fc; }
+    .badge-purple { background: rgba(167, 139, 250, 0.2); color: #ddd6fe; }
+    .badge-gray { background: rgba(148, 163, 184, 0.2); color: #cbd5e1; }
+    button {
+      background: var(--accent);
+      color: #0f172a;
+      border: none;
+      border-radius: 6px;
+      padding: 0.42rem 0.75rem;
+      font-weight: 600;
+      font-size: 0.82rem;
+      cursor: pointer;
+    }
+    button:hover { filter: brightness(1.08); }
+    button.secondary { background: #334155; color: var(--text); }
+    button.apply-btn { background: var(--green); color: #052e16; }
+    .btn-row { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+    .toast {
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      margin-bottom: 0.75rem;
+      font-size: 0.88rem;
+      display: none;
+    }
+    .toast.ok { display: block; background: rgba(34, 197, 94, 0.16); border: 1px solid var(--green); color: #bbf7d0; }
+    .toast.err { display: block; background: rgba(239, 68, 68, 0.16); border: 1px solid var(--red); color: #fecaca; }
+    .empty { color: var(--muted); font-style: italic; padding: 0.75rem 0; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.8rem; }
+    a.ics-link {
+      color: var(--blue);
+      text-decoration: none;
+      font-size: 0.82rem;
+      padding: 0.3rem 0.6rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--card-2);
+    }
+    a.ics-link:hover { border-color: var(--blue); }
+    .log-list { max-height: 280px; overflow-y: auto; display: grid; gap: 0.45rem; }
+    .log-item {
+      background: var(--card-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.55rem 0.75rem;
+      font-size: 0.82rem;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>SEVIMA-Mini · <span>Conflict Resolver</span> Dashboard</h1>
+      <div class="subtitle">Minggu 7-8: Deteksi Bentrok 3D · Observer + Outbox · Integrasi KRS · AI Rescheduling (4 Saringan) · Ekspor .ics</div>
+    </div>
+    <div class="btn-row">
+      <button class="secondary" onclick="refreshAll()">Muat Ulang Data</button>
+      <a class="ics-link" href="/api/mahasiswa/2301001/jadwal.ics" target="_blank">Unduh .ics Rina (2301001)</a>
+      <a class="ics-link" href="/api/mahasiswa/2301002/jadwal.ics" target="_blank">Unduh .ics Doni (2301002)</a>
+    </div>
+  </header>
+
+  <main>
+    <div id="toast" class="toast"></div>
+
+    <section class="kpis">
+      <div class="kpi"><div class="label">Total Jadwal</div><div class="val" id="kpi-jadwal">-</div></div>
+      <div class="kpi"><div class="label">Bentrok Aktif</div><div class="val" id="kpi-konflik" style="color:var(--red)">-</div></div>
+      <div class="kpi"><div class="label">KRS Status REVISION</div><div class="val" id="kpi-rev" style="color:var(--accent)">-</div></div>
+      <div class="kpi"><div class="label">Outbox Event SENT</div><div class="val" id="kpi-outbox" style="color:var(--green)">-</div></div>
+    </section>
+
+    <section class="card">
+      <h2>
+        <span>1. Daftar Bentrok Jadwal (Admin Only)</span>
+        <span class="badge badge-blue">GET /api/jadwal/conflicts</span>
+      </h2>
+      <div id="conflicts-container"><div class="empty">Memuat konflik...</div></div>
+    </section>
+
+    <section class="card" id="suggestions-card" style="display:none;">
+      <h2>
+        <span id="suggestions-title">2. Saran Alternatif AI (Lolos 4 Saringan)</span>
+        <span class="badge badge-purple">POST /api/jadwal/{id}/apply (Satu Pintu)</span>
+      </h2>
+      <div id="suggestions-container"></div>
+    </section>
+
+    <div class="grid-2">
+      <section class="card">
+        <h2>
+          <span>3. Daftar Jadwal Aktif</span>
+          <span class="badge badge-gray">SEQUENCE naik tiap berubah</span>
+        </h2>
+        <div id="jadwal-container"></div>
+      </section>
+
+      <section class="card">
+        <h2>
+          <span>4. Integrasi KRS (Otomatis ke REVISION)</span>
+          <span class="badge badge-amber">Actor.SISTEM</span>
+        </h2>
+        <div id="krs-container"></div>
+      </section>
+    </div>
+
+    <div class="grid-2">
+      <section class="card">
+        <h2>
+          <span>5. Simulasi Log Notifikasi (EMAIL / SMS / PUSH)</span>
+          <span class="badge badge-green">Idempotency Key</span>
+        </h2>
+        <div id="logs-container" class="log-list"></div>
+      </section>
+
+      <section class="card">
+        <h2>
+          <span>6. Tabel Transactional Outbox</span>
+          <span class="badge badge-blue">Kirim Setelah Commit</span>
+        </h2>
+        <div id="outbox-container"></div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    const HARI = ["", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+    const HEADERS = { "X-Role": "admin_akademik", "Content-Type": "application/json" };
+    let selectedJadwalId = null;
+
+    function showToast(msg, ok = true) {
+      const el = document.getElementById("toast");
+      el.textContent = msg;
+      el.className = "toast " + (ok ? "ok" : "err");
+    }
+
+    function statusBadge(st) {
+      const cls = {
+        APPROVED: "badge-green",
+        SUBMITTED: "badge-blue",
+        REVISION: "badge-amber",
+        DRAFT: "badge-gray",
+        SENT: "badge-green",
+        PENDING: "badge-amber",
+        FAILED: "badge-red",
+        EMAIL: "badge-blue",
+        SMS: "badge-amber",
+        PUSH: "badge-purple",
+        room_conflict: "badge-red",
+        lecturer_conflict: "badge-amber",
+        time_overlap: "badge-purple",
+      }[st] || "badge-gray";
+      return `<span class="badge ${cls}">${st}</span>`;
+    }
+
+    async function api(path, opts = {}) {
+      const res = await fetch(path, { ...opts, headers: { ...HEADERS, ...(opts.headers || {}) } });
+      if (!res.ok) {
+        let detail = res.statusText;
+        try { const j = await res.json(); detail = j.detail || detail; } catch (_) {}
+        const err = new Error(`HTTP ${res.status}: ${detail}`);
+        err.status = res.status;
+        throw err;
+      }
+      if (res.status === 204) return null;
+      return res.json();
+    }
+
+    async function loadSuggestions(jadwalId) {
+      selectedJadwalId = jadwalId;
+      const card = document.getElementById("suggestions-card");
+      const title = document.getElementById("suggestions-title");
+      const box = document.getElementById("suggestions-container");
+      card.style.display = "block";
+      title.textContent = `2. Saran Alternatif AI untuk Jadwal #${jadwalId} (Lolos 4 Saringan)`;
+      box.innerHTML = `<div class="empty">Menghitung slot tersedia &amp; memvalidasi saran AI...</div>`;
+
+      try {
+        const saran = await api(`/api/jadwal/${jadwalId}/suggestions`);
+        if (!saran.length) {
+          box.innerHTML = `<div class="empty">Tidak ada saran valid yang lolos 4 saringan.</div>`;
+          return;
+        }
+        const rows = saran.map((s, idx) => `
+          <tr>
+            <td><strong>${HARI[s.hari]} ${s.jam_mulai.slice(0, 5)}</strong> · Ruang <span class="mono">${s.ruangan}</span></td>
+            <td>${s.reason}</td>
+            <td><button class="apply-btn" onclick='applySaran(${jadwalId}, ${JSON.stringify(s)})'>Terapkan</button></td>
+          </tr>
+        `).join("");
+        box.innerHTML = `<table><thead><tr><th>Slot Alternatif</th><th>Alasan AI</th><th>Aksi</th></tr></thead><tbody>${rows}</tbody></table>`;
+      } catch (e) {
+        box.innerHTML = `<div class="empty">Gagal memuat saran: ${e.message}</div>`;
+      }
+    }
+
+    async function applySaran(jadwalId, saran) {
+      try {
+        const updated = await api(`/api/jadwal/${jadwalId}/apply`, {
+          method: "POST",
+          body: JSON.stringify(saran),
+        });
+        showToast(
+          `Jadwal #${updated.id} (${updated.nama_kelas}) berhasil dipindahkan ke ${HARI[updated.hari]} ${updated.jam_mulai.slice(0, 5)} ruang ${updated.ruangan_kode}. KRS terdampak diinvalidasi & notifikasi dikirim!`,
+          true
+        );
+        document.getElementById("suggestions-card").style.display = "none";
+        await refreshAll();
+      } catch (e) {
+        showToast(e.message, false);
+        if (e.status === 409) {
+          await loadSuggestions(jadwalId);
+        }
+      }
+    }
+
+    async function refreshAll() {
+      const [conflicts, jadwal, krs, logs, outbox] = await Promise.all([
+        api("/api/jadwal/conflicts"),
+        api("/api/jadwal"),
+        api("/api/krs"),
+        api("/api/logs/notifications"),
+        api("/api/outbox"),
+      ]);
+
+      document.getElementById("kpi-jadwal").textContent = jadwal.length;
+      document.getElementById("kpi-konflik").textContent = conflicts.length;
+      document.getElementById("kpi-rev").textContent = krs.filter(k => k.status === "REVISION").length;
+      document.getElementById("kpi-outbox").textContent = outbox.filter(o => o.status === "SENT").length;
+
+      // 1. Conflicts
+      const cBox = document.getElementById("conflicts-container");
+      if (!conflicts.length) {
+        cBox.innerHTML = `<div class="empty">Semua jadwal bersih — tidak ada bentrok terdeteksi!</div>`;
+      } else {
+        cBox.innerHTML = `<table>
+          <thead><tr><th>Affected</th><th>Tipe</th><th>Jadwal Terlibat</th><th>Selesaikan</th></tr></thead>
+          <tbody>
+            ${conflicts.map(c => {
+              const desc = c.schedules.map(s => `#${s.id} ${s.nama_kelas} (${HARI[s.hari]} ${s.jam_mulai}-${s.jam_selesai}, ${s.ruangan_kode})`).join("<br/>");
+              const btns = c.affected.map(id => `<button onclick="loadSuggestions(${id})">Saran AI #${id}</button>`).join(" ");
+              return `<tr><td class="mono">(${c.affected.join(", ")})</td><td>${statusBadge(c.type)}</td><td>${desc}</td><td><div class="btn-row">${btns}</div></td></tr>`;
+            }).join("")}
+          </tbody></table>`;
+      }
+
+      // 3. Jadwal
+      document.getElementById("jadwal-container").innerHTML = `<table>
+        <thead><tr><th>ID</th><th>Kelas</th><th>Waktu &amp; Ruang</th><th>Dosen</th><th>Seq</th></tr></thead>
+        <tbody>
+          ${jadwal.map(j => `<tr>
+            <td class="mono">#${j.id}</td>
+            <td>${j.nama_kelas}<br/><span class="subtitle">kuota ${j.kuota_kelas} · mhs ${j.terdaftar}</span></td>
+            <td>${HARI[j.hari]} ${j.jam_mulai.slice(0,5)}-${j.jam_selesai.slice(0,5)}<br/><span class="mono">${j.ruangan_kode}</span> (kap ${j.kapasitas_ruangan})</td>
+            <td>${j.nama_dosen}</td>
+            <td class="mono">${j.sequence}</td>
+          </tr>`).join("")}
+        </tbody></table>`;
+
+      // 4. KRS
+      document.getElementById("krs-container").innerHTML = `<table>
+        <thead><tr><th>Mahasiswa</th><th>Mata Kuliah</th><th>Status</th><th>Catatan</th></tr></thead>
+        <tbody>
+          ${krs.map(k => `<tr>
+            <td><strong>${k.nama_mahasiswa}</strong><br/><span class="mono subtitle">${k.nim}</span></td>
+            <td>${k.mata_kuliah.join(", ")}</td>
+            <td>${statusBadge(k.status)}</td>
+            <td class="subtitle">${k.catatan_revisi || "-"}</td>
+          </tr>`).join("")}
+        </tbody></table>`;
+
+      // 5. Logs
+      const lBox = document.getElementById("logs-container");
+      if (!logs.length) {
+        lBox.innerHTML = `<div class="empty">Belum ada notifikasi terkirim. Ubah/selesaikan bentrok jadwal untuk melihat simulasi EMAIL, SMS, dan PUSH.</div>`;
+      } else {
+        lBox.innerHTML = logs.map(l => `
+          <div class="log-item">
+            ${statusBadge(l.channel)} <strong>${l.penerima}</strong><br/>
+            ${l.pesan}<br/>
+            <span class="mono subtitle">key=${l.idempotency_key}</span>
+          </div>
+        `).join("");
+      }
+
+      // 6. Outbox
+      const oBox = document.getElementById("outbox-container");
+      if (!outbox.length) {
+        oBox.innerHTML = `<div class="empty">Tabel outbox kosong. Event akan dicatat atomik bersama perubahan jadwal.</div>`;
+      } else {
+        oBox.innerHTML = `<table>
+          <thead><tr><th>ID</th><th>Event</th><th>Status</th><th>Attempts</th></tr></thead>
+          <tbody>
+            ${outbox.map(o => `<tr>
+              <td class="mono">#${o.id}</td>
+              <td><strong>${o.payload.type}</strong> (jadwal #${o.payload.jadwal_id})<br/><span class="mono subtitle">${o.event_id}</span></td>
+              <td>${statusBadge(o.status)}</td>
+              <td class="mono">${o.attempts}</td>
+            </tr>`).join("")}
+          </tbody></table>`;
+      }
+    }
+
+    refreshAll().catch(e => showToast(e.message, false));
+  </script>
+</body>
+</html>
