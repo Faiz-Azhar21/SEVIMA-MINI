@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Modul Keuangan (SPP) — Dashboard Real-Time</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-left">
+      <div class="logo-mark">SPP</div>
+      <div>
+        <h1>Dashboard Keuangan SPP</h1>
+        <p class="subtitle">Minggu 11 · Payment State, APScheduler, Webhook HMAC, Block KRS &amp; AI Insights</p>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div id="liveBadge" class="live-badge">
+        <span class="pulse-dot"></span>
+        <span id="liveStatusText">Menghubungkan SSE...</span>
+      </div>
+      <select id="semesterFilter" class="select-input" title="Filter Semester">
+        <option value="">Semua Semester</option>
+      </select>
+      <button id="btnRunOverdue" class="btn btn-outline" title="Hitung denda & kirim reminder otomatis">
+        Hitung Denda &amp; Reminder
+      </button>
+      <button id="btnOpenGenModal" class="btn btn-primary">
+        + Generate Billing
+      </button>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- Toast Notification -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <!-- 1. KPI Summary Cards -->
+    <section class="kpi-grid">
+      <article class="kpi-card">
+        <span class="kpi-label">Total Tagihan SPP</span>
+        <strong id="kpiTotalTagihan" class="kpi-value">Rp 0</strong>
+        <span id="kpiTotalTagihanSub" class="kpi-sub">0 mahasiswa tertagih</span>
+      </article>
+      <article class="kpi-card kpi-success">
+        <span class="kpi-label">Total Sudah Bayar</span>
+        <strong id="kpiTotalBayar" class="kpi-value">Rp 0</strong>
+        <span id="kpiTotalBayarSub" class="kpi-sub">0% dari total tagihan</span>
+      </article>
+      <article class="kpi-card kpi-danger">
+        <span class="kpi-label">Total Sisa Tunggakan</span>
+        <strong id="kpiTotalSisa" class="kpi-value">Rp 0</strong>
+        <span id="kpiTotalDendaSub" class="kpi-sub">Termasuk denda Rp 0</span>
+      </article>
+      <article class="kpi-card kpi-indigo">
+        <span class="kpi-label">Collection Rate &amp; Block KRS</span>
+        <strong id="kpiCollectionRate" class="kpi-value">0%</strong>
+        <span id="kpiKrsBlockedSub" class="kpi-sub">0 mahasiswa diblokir KRS</span>
+      </article>
+    </section>
+
+    <!-- 2. Analytics Grid: Monthly Chart + Collection Rate per Prodi -->
+    <section class="analytics-grid">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <h2>Grafik Pembayaran per Bulan</h2>
+            <p class="card-desc">Total penerimaan SPP terkonfirmasi (manual &amp; webhook)</p>
+          </div>
+          <span id="lastUpdatedLabel" class="muted-small">Update: -</span>
+        </div>
+        <div id="monthlyChartContainer" class="chart-wrap">
+          <div class="empty-state">Memuat grafik...</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <h2>Collection Rate per Program Studi</h2>
+            <p class="card-desc">Persentase mahasiswa lunas &amp; rasio nominal terkumpul</p>
+          </div>
+        </div>
+        <div id="prodiContainer" class="prodi-list">
+          <div class="empty-state">Memuat data program studi...</div>
+        </div>
+        <div class="status-pills-row" id="statusSummaryRow"></div>
+      </div>
+    </section>
+
+    <!-- 3. Per Mahasiswa Financial Table -->
+    <section class="card">
+      <div class="card-header table-header-wrap">
+        <div>
+          <h2>Ringkasan Keuangan per Mahasiswa</h2>
+          <p class="card-desc">Total tagihan, sudah bayar, sisa, status tunggakan, dan status blokir KRS</p>
+        </div>
+        <div class="filters-row">
+          <input id="searchInput" type="search" class="text-input" placeholder="Cari NIM atau nama..." />
+          <select id="prodiFilter" class="select-input">
+            <option value="">Semua Prodi</option>
+            <option value="Teknik">Teknik</option>
+            <option value="Ekonomi">Ekonomi</option>
+          </select>
+          <select id="statusFilter" class="select-input">
+            <option value="">Semua Status</option>
+            <option value="paid">Paid (Lunas)</option>
+            <option value="partial">Partial (Cicilan)</option>
+            <option value="unpaid">Unpaid (Belum Bayar)</option>
+            <option value="overdue">Overdue (Menunggak)</option>
+          </select>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Mahasiswa</th>
+              <th>Program Studi</th>
+              <th class="num">Total Tagihan</th>
+              <th class="num">Sudah Bayar</th>
+              <th class="num">Sisa Tagihan</th>
+              <th>Status</th>
+              <th>Akses KRS</th>
+              <th>Aksi Cepat</th>
+            </tr>
+          </thead>
+          <tbody id="studentTableBody">
+            <tr><td colspan="8" class="empty-state">Memuat data mahasiswa...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 4. Tabbed Operational & AI Panels -->
+    <section class="card">
+      <div class="tabs-bar">
+        <button class="tab-btn active" data-tab="tab-ai">AI Financial Report (JSON)</button>
+        <button class="tab-btn" data-tab="tab-webhook">Simulasi Webhook &amp; Curl</button>
+        <button class="tab-btn" data-tab="tab-krs">Uji Block KRS</button>
+        <button class="tab-btn" data-tab="tab-ops">Scheduler &amp; Log Email</button>
+      </div>
+
+      <!-- TAB 1: AI Financial Insights -->
+      <div id="tab-ai" class="tab-panel active">
+        <div class="panel-toolbar">
+          <div class="btn-group">
+            <button id="btnAiLive" class="btn btn-primary btn-sm">Analisis Data Live DB</button>
+            <button id="btnAiSample" class="btn btn-outline btn-sm">Analisis data/payment_data.csv</button>
+            <label class="btn btn-outline btn-sm file-btn">
+              Upload CSV Custom
+              <input id="csvUploadInput" type="file" accept=".csv" hidden />
+            </label>
+            <a href="/api/ai-report/export-csv" class="btn btn-outline btn-sm" download>Download CSV Live</a>
+          </div>
+          <button id="btnToggleJson" class="btn btn-outline btn-sm">Lihat Raw JSON</button>
+        </div>
+
+        <div id="aiRecommendationBanner" class="alert-banner">Memuat rekomendasi AI...</div>
+
+        <div class="ai-metrics-grid">
+          <div class="mini-metric">
+            <span class="kpi-label">Total Revenue Bulan Ini</span>
+            <strong id="aiRevenueBulanIni">Rp 0</strong>
+          </div>
+          <div class="mini-metric">
+            <span class="kpi-label">Collection Rate</span>
+            <strong id="aiCollectionRate">0% mahasiswa sudah bayar</strong>
+          </div>
+          <div class="mini-metric">
+            <span class="kpi-label">Tunggakan &gt; 2 Bulan</span>
+            <strong id="aiOverdue2m">0 mahasiswa</strong>
+          </div>
+          <div class="mini-metric">
+            <span class="kpi-label">Engine &amp; Sumber</span>
+            <strong id="aiEngineInfo">-</strong>
+          </div>
+        </div>
+
+        <div class="two-col-panel">
+          <div>
+            <h3>Top 10 Mahasiswa dengan Tunggakan Terbesar</h3>
+            <div class="table-responsive">
+              <table class="data-table compact">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>NIM &amp; Nama</th>
+                    <th>Status</th>
+                    <th>Lama</th>
+                    <th class="num">Tunggakan</th>
+                  </tr>
+                </thead>
+                <tbody id="aiTop10Body">
+                  <tr><td colspan="5" class="empty-state">Memuat...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div>
+            <h3>Insight Strategis AI</h3>
+            <ul id="aiInsightsList" class="insights-list"></ul>
+            <div id="aiRawJsonBox" class="code-box hidden">
+              <div class="code-box-head">
+                <span>Output JSON untuk Dashboard Frontend</span>
+                <button id="btnCopyAiJson" class="btn btn-outline btn-xs">Salin JSON</button>
+              </div>
+              <pre id="aiRawJsonPre"></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 2: Webhook Simulation -->
+      <div id="tab-webhook" class="tab-panel">
+        <div class="two-col-panel">
+          <form id="webhookForm" class="form-stack">
+            <h3>Simulasi Payment Gateway Webhook</h3>
+            <p class="card-desc">Kirim notifikasi pembayaran bertanda tangan HMAC-SHA256 ke <code>POST /api/webhook/payment</code>.</p>
+            <label class="field">
+              <span>Pilih Tagihan (Belum Lunas)</span>
+              <select id="whBillingSelect" class="select-input" required></select>
+            </label>
+            <div class="field-row">
+              <label class="field">
+                <span>Nominal (Rp)</span>
+                <input id="whAmount" type="number" class="text-input" min="1000" required />
+              </label>
+              <label class="field">
+                <span>Metode Gateway</span>
+                <select id="whMethod" class="select-input">
+                  <option value="VA_BCA">Virtual Account BCA</option>
+                  <option value="VA_BNI">Virtual Account BNI</option>
+                  <option value="VA_MANDIRI">Virtual Account Mandiri</option>
+                  <option value="QRIS">QRIS Kampus</option>
+                </select>
+              </label>
+            </div>
+            <div class="field-row">
+              <label class="field">
+                <span>Transaction ID</span>
+                <input id="whTxId" type="text" class="text-input" required />
+              </label>
+              <label class="field">
+                <span>Status Gateway</span>
+                <select id="whStatus" class="select-input">
+                  <option value="paid">paid (Sukses)</option>
+                  <option value="settlement">settlement (Sukses)</option>
+                  <option value="pending">pending (Belum Bayar)</option>
+                  <option value="failed">failed (Gagal)</option>
+                </select>
+              </label>
+            </div>
+            <div class="btn-group">
+              <button type="button" id="btnPreviewCurl" class="btn btn-outline">Generate Signature &amp; Curl</button>
+              <button type="submit" class="btn btn-primary">Kirim Webhook Sekarang</button>
+            </div>
+          </form>
+
+          <div>
+            <h3>Preview Signature HMAC-SHA256 &amp; Perintah Curl</h3>
+            <div class="code-box">
+              <div class="code-box-head">
+                <span>Perintah uji via terminal (curl)</span>
+                <button type="button" id="btnCopyCurl" class="btn btn-outline btn-xs">Salin Curl</button>
+              </div>
+              <pre id="webhookCurlPre">Klik "Generate Signature &amp; Curl" atau pilih tagihan.</pre>
+            </div>
+            <h3 style="margin-top:16px;">Respons Webhook Terakhir</h3>
+            <div class="code-box">
+              <pre id="webhookRespPre">Belum ada pengujian webhook pada sesi ini.</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 3: Block KRS Testing -->
+      <div id="tab-krs" class="tab-panel">
+        <div class="two-col-panel">
+          <form id="krsForm" class="form-stack">
+            <h3>Uji Pengisian KRS (Validasi Tunggakan)</h3>
+            <p class="card-desc">Mahasiswa dengan tagihan <code>unpaid</code>, <code>partial</code>, atau <code>overdue</code> otomatis diblokir (HTTP 403).</p>
+            <label class="field">
+              <span>Pilih Mahasiswa</span>
+              <select id="krsNimSelect" class="select-input" required></select>
+            </label>
+            <div class="field-row">
+              <label class="field">
+                <span>Semester KRS</span>
+                <input id="krsSemester" type="text" class="text-input" value="2026/2027-Ganjil" required />
+              </label>
+              <label class="field">
+                <span>Total SKS</span>
+                <input id="krsSks" type="number" class="text-input" value="20" min="1" max="24" required />
+              </label>
+            </div>
+            <label class="field">
+              <span>Daftar Mata Kuliah (pisahkan dengan koma)</span>
+              <input id="krsMatkul" type="text" class="text-input" value="Struktur Data, Basis Data Lanjut, Rekayasa Perangkat Lunak, Sistem Operasi" required />
+            </label>
+            <div class="btn-group">
+              <button type="button" id="btnCheckKrs" class="btn btn-outline">Cek Status Eligibilitas</button>
+              <button type="submit" class="btn btn-primary">Submit Pengisian KRS</button>
+            </div>
+          </form>
+
+          <div>
+            <h3>Hasil Pemeriksaan / Submit KRS</h3>
+            <div id="krsResultCard" class="result-panel">
+              Pilih mahasiswa lalu klik <strong>Cek Status Eligibilitas</strong> atau <strong>Submit Pengisian KRS</strong>.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 4: Scheduler & Email Logs -->
+      <div id="tab-ops" class="tab-panel">
+        <div class="two-col-panel">
+          <div>
+            <h3>APScheduler Cron Jobs Aktif</h3>
+            <div id="schedulerJobsList" class="stack-list">Memuat jadwal APScheduler...</div>
+            <h3 style="margin-top:20px;">Riwayat Pembayaran Terbaru</h3>
+            <div id="recentPaymentsList" class="stack-list"></div>
+          </div>
+          <div>
+            <h3>Log Email Receipt &amp; Reminder Otomatis</h3>
+            <div id="recentEmailsList" class="stack-list"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Modal: Generate Billing Semester -->
+  <div id="genModal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3>Generate Tagihan SPP Semester Baru</h3>
+        <button id="btnCloseGenModal" class="icon-close">&times;</button>
+      </div>
+      <form id="genBillingForm" class="form-stack">
+        <p class="card-desc">Membuat tagihan otomatis untuk semua mahasiswa aktif (Teknik: Rp 5 jt, Ekonomi: Rp 4 jt, jatuh tempo +14 hari, status <code>unpaid</code>).</p>
+        <label class="field">
+          <span>Nama Semester</span>
+          <input id="genSemester" type="text" class="text-input" value="2026/2027-Genap" required />
+        </label>
+        <label class="field">
+          <span>Tanggal Mulai Semester</span>
+          <input id="genStartDate" type="date" class="text-input" value="2027-02-01" required />
+        </label>
+        <div class="btn-group" style="justify-content:flex-end;">
+          <button type="button" id="btnCancelGen" class="btn btn-outline">Batal</button>
+          <button type="submit" class="btn btn-primary">Generate Tagihan</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Pembayaran Manual -->
+  <div id="payModal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3>Catat Pembayaran Manual</h3>
+        <button id="btnClosePayModal" class="icon-close">&times;</button>
+      </div>
+      <form id="manualPayForm" class="form-stack">
+        <div id="payModalInfo" class="info-strip"></div>
+        <input id="payBillingId" type="hidden" />
+        <label class="field">
+          <span>Nominal Bayar (Rp)</span>
+          <input id="payAmount" type="number" class="text-input" min="1000" required />
+        </label>
+        <label class="field">
+          <span>Metode Pembayaran</span>
+          <select id="payMethod" class="select-input">
+            <option value="TRANSFER_MANUAL">Transfer Bank Manual</option>
+            <option value="CASH_LOKET">Loket Keuangan Kampus</option>
+            <option value="VA_BCA">Virtual Account BCA</option>
+            <option value="QRIS">QRIS Kampus</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Catatan (Opsional)</span>
+          <input id="payNotes" type="text" class="text-input" placeholder="Misal: Cicilan tahap 1 / Pelunasan loket" />
+        </label>
+        <div class="btn-group" style="justify-content:flex-end;">
+          <button type="button" id="btnCancelPay" class="btn btn-outline">Batal</button>
+          <button type="submit" class="btn btn-primary">Simpan Pembayaran</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
