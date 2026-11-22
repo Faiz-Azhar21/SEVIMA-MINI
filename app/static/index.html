@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Modul Presensi QR Code — Minggu 12</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --surface-2: #273549;
+      --border: #334155;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --success: #22c55e;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --radius: 12px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+    header {
+      background: linear-gradient(135deg, #1e3a8a, #0f172a);
+      border-bottom: 1px solid var(--border);
+      padding: 20px 24px;
+    }
+    .header-inner {
+      max-width: 1120px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    h1 { margin: 0; font-size: 1.35rem; }
+    .subtitle { color: #cbd5e1; font-size: 0.88rem; margin-top: 4px; }
+    .header-links a {
+      color: #93c5fd;
+      text-decoration: none;
+      font-size: 0.88rem;
+      padding: 6px 12px;
+      border: 1px solid #3b82f6;
+      border-radius: 8px;
+    }
+    .container {
+      max-width: 1120px;
+      margin: 24px auto;
+      padding: 0 20px 48px;
+    }
+    .tabs {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+    .tab-btn {
+      background: var(--surface);
+      color: var(--muted);
+      border: 1px solid var(--border);
+      padding: 10px 16px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.92rem;
+      transition: all 0.15s ease;
+    }
+    .tab-btn.active {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+    }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 18px;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 18px;
+    }
+    .card h2 {
+      margin: 0 0 12px;
+      font-size: 1.08rem;
+      color: #e2e8f0;
+    }
+    label {
+      display: block;
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin: 10px 0 6px;
+    }
+    select, input, textarea {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #0f172a;
+      color: var(--text);
+      font-size: 0.92rem;
+    }
+    textarea { min-height: 82px; font-family: ui-monospace, monospace; font-size: 0.8rem; }
+    .btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+    button.action {
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      padding: 10px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+    button.action:hover { background: var(--primary-hover); }
+    button.secondary {
+      background: var(--surface-2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 10px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.88rem;
+    }
+    .qr-box {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      padding: 16px;
+      background: #0f172a;
+      border-radius: 10px;
+      border: 1px dashed var(--border);
+    }
+    .qr-box img {
+      width: 240px;
+      height: 240px;
+      background: #fff;
+      padding: 8px;
+      border-radius: 10px;
+      margin-bottom: 12px;
+    }
+    .badge {
+      display: inline-block;
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-size: 0.76rem;
+      font-weight: 700;
+    }
+    .badge-ok { background: rgba(34,197,94,0.18); color: #86efac; }
+    .badge-warn { background: rgba(245,158,11,0.2); color: #fcd34d; }
+    .badge-danger { background: rgba(239,68,68,0.2); color: #fca5a5; }
+    .alert {
+      padding: 12px 14px;
+      border-radius: 8px;
+      margin-top: 12px;
+      font-size: 0.9rem;
+      border: 1px solid transparent;
+    }
+    .alert-ok { background: rgba(34,197,94,0.12); border-color: rgba(34,197,94,0.4); color: #bbf7d0; }
+    .alert-err { background: rgba(239,68,68,0.12); border-color: rgba(239,68,68,0.4); color: #fecaca; }
+    .alert-warn { background: rgba(245,158,11,0.14); border-color: rgba(245,158,11,0.45); color: #fde68a; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      font-size: 0.88rem;
+    }
+    th, td {
+      padding: 9px 10px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+    }
+    th { color: var(--muted); font-weight: 600; background: rgba(15,23,42,0.5); }
+    pre {
+      background: #0b1120;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+      overflow-x: auto;
+      font-size: 0.8rem;
+      color: #cbd5e1;
+      max-height: 360px;
+    }
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .kpi {
+      background: #0f172a;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px;
+    }
+    .kpi-label { font-size: 0.78rem; color: var(--muted); }
+    .kpi-val { font-size: 1.45rem; font-weight: 700; margin-top: 4px; }
+    .muted { color: var(--muted); font-size: 0.85rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <div>
+        <h1>Modul Presensi Berbasis QR Code</h1>
+        <div class="subtitle">Minggu 12 — JWT 15 Menit, Anti-Replay, Validasi Jadwal & Enrollment, Export Excel, dan AI Insights</div>
+      </div>
+      <div class="header-links">
+        <a href="/docs" target="_blank">Swagger API Docs</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('qr', this)">1. Generate QR (Dosen)</button>
+      <button class="tab-btn" onclick="switchTab('scan', this)">2. Scan QR (Mahasiswa)</button>
+      <button class="tab-btn" onclick="switchTab('report', this)">3. Laporan & Excel</button>
+      <button class="tab-btn" onclick="switchTab('ai', this)">4. AI Attendance Insights</button>
+    </div>
+
+    <!-- TAB 1: GENERATE QR -->
+    <section id="tab-qr" class="panel active">
+      <div class="grid">
+        <div class="card">
+          <h2>Generate QR Sesi Kuliah</h2>
+          <p class="muted">Pilih jadwal kuliah lalu generate QR Code (valid 15 menit, token unik anti replay attack).</p>
+          <label for="qr-schedule">Pilih Jadwal Kuliah</label>
+          <select id="qr-schedule"></select>
+
+          <label for="qr-minutes">Masa Berlaku QR (Menit)</label>
+          <input id="qr-minutes" type="number" min="1" max="60" value="15" />
+
+          <div class="btn-row">
+            <button class="action" onclick="generateQR()">Generate QR Code</button>
+            <button class="secondary" onclick="syncDemoSchedule()">Aktifkan Jadwal Demo Saat Ini</button>
+          </div>
+          <div id="qr-status"></div>
+        </div>
+
+        <div class="card">
+          <h2>Preview QR Code & Token</h2>
+          <div id="qr-preview" class="qr-box">
+            <p class="muted">Belum ada QR yang di-generate. Klik tombol "Generate QR Code".</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 2: SCAN QR -->
+    <section id="tab-scan" class="panel">
+      <div class="grid">
+        <div class="card">
+          <h2>Simulasi Scan QR Mahasiswa</h2>
+          <p class="muted">Sistem memvalidasi JWT & expiry, hari/jam kuliah, enrollment MK, lokasi (opsional), anti-duplikat, dan rate limiting.</p>
+
+          <label for="scan-student">Pilih Mahasiswa (NIM)</label>
+          <select id="scan-student"></select>
+
+          <label for="scan-token">JWT Token dari QR Code</label>
+          <textarea id="scan-token" placeholder="Tempel token JWT hasil generate QR..."></textarea>
+
+          <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div>
+              <label for="scan-lat">Latitude (Opsional)</label>
+              <input id="scan-lat" type="number" step="any" placeholder="-6.200000" />
+            </div>
+            <div>
+              <label for="scan-lng">Longitude (Opsional)</label>
+              <input id="scan-lng" type="number" step="any" placeholder="106.816666" />
+            </div>
+          </div>
+
+          <div class="btn-row">
+            <button class="action" onclick="submitScan()">Kirim Scan Presensi</button>
+            <button class="secondary" onclick="fillCampusGeo()">Isi Lokasi Kampus</button>
+            <button class="secondary" onclick="fillFarGeo()">Simulasi Lokasi Jauh (Ditolak)</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Hasil Validasi Scan</h2>
+          <div id="scan-result">
+            <p class="muted">Belum ada percobaan scan. Generate QR di Tab 1 lalu kirim scan dari sini.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: REPORT & EXCEL -->
+    <section id="tab-report" class="panel">
+      <div class="card">
+        <h2>Laporan Presensi per Mata Kuliah & Export Excel</h2>
+        <div class="btn-row" style="align-items: flex-end; margin-top: 0;">
+          <div style="flex: 1; min-width: 240px;">
+            <label for="report-course">Pilih Mata Kuliah</label>
+            <select id="report-course" onchange="loadCourseReport()"></select>
+          </div>
+          <button class="action" onclick="loadCourseReport()">Muat Laporan</button>
+          <button class="secondary" onclick="downloadExcel()">Export Excel (.xlsx)</button>
+        </div>
+        <div id="course-report-body" style="margin-top: 16px;"></div>
+      </div>
+
+      <div class="card">
+        <h2>Rekap Kehadiran per Mahasiswa</h2>
+        <div class="btn-row" style="align-items: flex-end; margin-top: 0;">
+          <div style="flex: 1; min-width: 240px;">
+            <label for="report-student">Pilih Mahasiswa</label>
+            <select id="report-student" onchange="loadStudentReport()"></select>
+          </div>
+          <button class="action" onclick="loadStudentReport()">Lihat Rekap Mahasiswa</button>
+        </div>
+        <div id="student-report-body" style="margin-top: 16px;"></div>
+      </div>
+    </section>
+
+    <!-- TAB 4: AI INSIGHTS -->
+    <section id="tab-ai" class="panel">
+      <div class="card">
+        <h2>AI Attendance Insights & Early Warning</h2>
+        <div class="btn-row" style="align-items: flex-end; margin-top: 0;">
+          <div style="flex: 1; min-width: 240px;">
+            <label for="ai-course-filter">Cakupan Analisis</label>
+            <select id="ai-course-filter" onchange="loadAIInsights()"></select>
+          </div>
+          <button class="action" onclick="loadAIInsights()">Jalankan AI Analyzer</button>
+        </div>
+        <div id="ai-summary-area" style="margin-top: 16px;"></div>
+      </div>
+      <div class="card">
+        <h2>Structured JSON Output (Insights + Actions)</h2>
+        <pre id="ai-json-raw">Memuat analisis...</pre>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    let metaData = null;
+    let countdownTimer = null;
+
+    function switchTab(name, btn) {
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById('tab-' + name).classList.add('active');
+      btn.classList.add('active');
+      if (name === 'report') { loadCourseReport(); loadStudentReport(); }
+      if (name === 'ai') { loadAIInsights(); }
+    }
+
+    async function loadMeta() {
+      const res = await fetch('/attendance/meta');
+      metaData = await res.json();
+
+      const schedSel = document.getElementById('qr-schedule');
+      schedSel.innerHTML = '';
+      metaData.schedules.forEach(s => {
+        const tag = s.in_scan_window ? ' [AKTIF SEKARANG]' : (s.is_today ? ' [HARI INI]' : '');
+        const opt = document.createElement('option');
+        opt.value = s.id;
+        opt.textContent = `${s.course_code} - ${s.course_name} (${s.day_name} ${s.start_time}-${s.end_time}, ${s.room})${tag}`;
+        if (s.in_scan_window) opt.selected = true;
+        schedSel.appendChild(opt);
+      });
+
+      const studentSelectors = [document.getElementById('scan-student'), document.getElementById('report-student')];
+      studentSelectors.forEach(sel => {
+        sel.innerHTML = '';
+        metaData.students.forEach(st => {
+          const courseCodes = st.enrolled_course_ids
+            .map(cid => metaData.courses.find(c => c.id === cid)?.code)
+            .filter(Boolean).join(', ');
+          const opt = document.createElement('option');
+          opt.value = st.nim;
+          opt.textContent = `${st.nim} - ${st.name} (MK: ${courseCodes || '-'})`;
+          sel.appendChild(opt);
+        });
+      });
+
+      const courseSel = document.getElementById('report-course');
+      const aiSel = document.getElementById('ai-course-filter');
+      courseSel.innerHTML = '';
+      aiSel.innerHTML = '<option value="">Semua Mata Kuliah</option>';
+      metaData.courses.forEach(c => {
+        courseSel.innerHTML += `<option value="${c.id}">${c.code} - ${c.name}</option>`;
+        aiSel.innerHTML += `<option value="${c.id}">${c.code} - ${c.name}</option>`;
+      });
+    }
+
+    async function syncDemoSchedule() {
+      const res = await fetch('/attendance/schedules/demo-now', { method: 'POST' });
+      const data = await res.json();
+      await loadMeta();
+      document.getElementById('qr-schedule').value = data.schedule_id;
+      document.getElementById('qr-status').innerHTML =
+        `<div class="alert alert-ok">${data.message} (${data.course_code}, ${data.day_name} ${data.start_time}-${data.end_time})</div>`;
+    }
+
+    async function generateQR() {
+      const scheduleId = document.getElementById('qr-schedule').value;
+      const validMinutes = document.getElementById('qr-minutes').value || 15;
+      const res = await fetch(`/attendance/qr/${scheduleId}/info?valid_minutes=${validMinutes}`);
+      const data = await res.json();
+      if (!res.ok) {
+        document.getElementById('qr-status').innerHTML = `<div class="alert alert-err">${data.detail}</div>`;
+        return;
+      }
+
+      document.getElementById('scan-token').value = data.token;
+      const expiresAtMs = new Date(data.expires_at).getTime();
+
+      document.getElementById('qr-preview').innerHTML = `
+        <img src="data:image/png;base64,${data.qr_image_base64}" alt="QR Code Presensi" />
+        <div><strong>${data.course_code} — ${data.course_name}</strong></div>
+        <div class="muted">Pertemuan #${data.meeting_number} • ${data.day_name} ${data.start_time}-${data.end_time} • ${data.room}</div>
+        <div style="margin: 8px 0;">
+          <span class="badge badge-ok" id="qr-countdown">Valid ${data.valid_minutes} menit</span>
+          <span class="badge badge-warn">JTI: ${data.jti.slice(0, 10)}...</span>
+        </div>
+        <textarea readonly style="margin-top:6px;">${data.token}</textarea>
+        <div class="btn-row">
+          <button class="secondary" onclick="copyToken('${data.token}')">Salin Token</button>
+          <a href="/attendance/qr/${scheduleId}" target="_blank" style="color:#93c5fd;align-self:center;font-size:0.85rem;">Buka Endpoint PNG</a>
+        </div>
+      `;
+      document.getElementById('qr-status').innerHTML =
+        `<div class="alert alert-ok">QR unik berhasil di-generate dan otomatis diisikan ke form Scan (Tab 2).</div>`;
+
+      if (countdownTimer) clearInterval(countdownTimer);
+      countdownTimer = setInterval(() => {
+        const diff = Math.floor((expiresAtMs - Date.now()) / 1000);
+        const badge = document.getElementById('qr-countdown');
+        if (!badge) return;
+        if (diff <= 0) {
+          badge.className = 'badge badge-danger';
+          badge.textContent = 'EXPIRED';
+          clearInterval(countdownTimer);
+        } else {
+          const m = Math.floor(diff / 60);
+          const s = String(diff % 60).padStart(2, '0');
+          badge.textContent = `Sisa waktu: ${m}:${s}`;
+        }
+      }, 1000);
+    }
+
+    function copyToken(token) {
+      navigator.clipboard.writeText(token);
+      alert('Token JWT berhasil disalin.');
+    }
+
+    function fillCampusGeo() {
+      document.getElementById('scan-lat').value = -6.200000;
+      document.getElementById('scan-lng').value = 106.816666;
+    }
+
+    function fillFarGeo() {
+      document.getElementById('scan-lat').value = -6.250000;
+      document.getElementById('scan-lng').value = 106.850000;
+    }
+
+    async function submitScan() {
+      const nim = document.getElementById('scan-student').value;
+      const token = document.getElementById('scan-token').value.trim();
+      const latRaw = document.getElementById('scan-lat').value;
+      const lngRaw = document.getElementById('scan-lng').value;
+
+      const body = { token, nim };
+      if (latRaw !== '' && lngRaw !== '') {
+        body.latitude = parseFloat(latRaw);
+        body.longitude = parseFloat(lngRaw);
+      }
+
+      const res = await fetch('/attendance/scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      const box = document.getElementById('scan-result');
+      if (res.ok) {
+        const badgeCls = data.status === 'hadir' ? 'badge-ok' : 'badge-warn';
+        box.innerHTML = `
+          <div class="alert alert-ok">
+            <span class="badge ${badgeCls}">${data.status.toUpperCase()}</span>
+            <div style="margin-top:8px;">${data.message}</div>
+          </div>
+          <pre>${JSON.stringify(data, null, 2)}</pre>
+        `;
+      } else {
+        box.innerHTML = `
+          <div class="alert alert-err">
+            <strong>Validasi Ditolak (HTTP ${res.status})</strong>
+            <div style="margin-top:6px;">${data.detail || JSON.stringify(data)}</div>
+          </div>
+        `;
+      }
+    }
+
+    async function loadCourseReport() {
+      const courseId = document.getElementById('report-course').value;
+      if (!courseId) return;
+      const res = await fetch(`/attendance/report/course/${courseId}`);
+      const r = await res.json();
+
+      let rows = r.students.map(s => `
+        <tr>
+          <td>${s.nim}</td>
+          <td>${s.student_name}</td>
+          <td>${s.hadir}</td>
+          <td>${s.terlambat}</td>
+          <td>${s.absent}</td>
+          <td><strong>${s.attendance_percentage.toFixed(1)}%</strong></td>
+          <td>${s.warning ? '<span class="badge badge-danger">WARNING &lt;75%</span>' : '<span class="badge badge-ok">AMAN</span>'}</td>
+        </tr>
+      `).join('');
+
+      document.getElementById('course-report-body').innerHTML = `
+        <div class="kpi-grid">
+          <div class="kpi"><div class="kpi-label">Total Sesi</div><div class="kpi-val">${r.total_sessions}</div></div>
+          <div class="kpi"><div class="kpi-label">Total Mahasiswa</div><div class="kpi-val">${r.total_students}</div></div>
+          <div class="kpi"><div class="kpi-label">Rata-rata Hadir</div><div class="kpi-val">${r.average_attendance_percentage.toFixed(1)}%</div></div>
+          <div class="kpi"><div class="kpi-label">Mahasiswa &lt;75%</div><div class="kpi-val" style="color:${r.warning_count > 0 ? '#fca5a5' : '#86efac'}">${r.warning_count}</div></div>
+        </div>
+        <table>
+          <thead><tr><th>NIM</th><th>Nama</th><th>Hadir</th><th>Terlambat</th><th>Absent</th><th>Persentase</th><th>Status</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      `;
+    }
+
+    function downloadExcel() {
+      const courseId = document.getElementById('report-course').value;
+      if (courseId) window.location.href = `/attendance/report/course/${courseId}/export`;
+    }
+
+    async function loadStudentReport() {
+      const nim = document.getElementById('report-student').value;
+      if (!nim) return;
+      const res = await fetch(`/attendance/report/student/${nim}`);
+      const r = await res.json();
+
+      let rows = r.courses.map(c => `
+        <tr>
+          <td>${c.course_code}</td>
+          <td>${c.course_name}</td>
+          <td>${c.hadir}</td>
+          <td>${c.terlambat}</td>
+          <td>${c.absent}</td>
+          <td>${c.total_sessions}</td>
+          <td><strong>${c.attendance_percentage.toFixed(1)}%</strong></td>
+          <td>${c.warning ? '<span class="badge badge-danger">WARNING</span>' : '<span class="badge badge-ok">AMAN</span>'}</td>
+        </tr>
+      `).join('');
+
+      document.getElementById('student-report-body').innerHTML = `
+        <p class="muted"><strong>${r.student_name} (${r.nim})</strong> — Kehadiran keseluruhan: <strong>${r.overall_attendance_percentage.toFixed(1)}%</strong></p>
+        <table>
+          <thead><tr><th>Kode</th><th>Mata Kuliah</th><th>Hadir</th><th>Terlambat</th><th>Absent</th><th>Total Sesi</th><th>Persentase</th><th>Status</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      `;
+    }
+
+    async function loadAIInsights() {
+      const courseId = document.getElementById('ai-course-filter').value;
+      const url = courseId ? `/attendance/ai/insights?course_id=${courseId}` : '/attendance/ai/insights';
+      const res = await fetch(url);
+      const data = await res.json();
+
+      const insightCards = data.insights.map(ins => `
+        <div class="alert ${ins.severity === 'high' ? 'alert-err' : (ins.severity === 'medium' ? 'alert-warn' : 'alert-ok')}">
+          <span class="badge ${ins.severity === 'high' ? 'badge-danger' : 'badge-warn'}">${ins.category}</span>
+          <div style="margin-top:6px;">${ins.summary}</div>
+        </div>
+      `).join('');
+
+      const actionRows = data.actions.map(act => `
+        <tr>
+          <td><span class="badge ${act.priority === 'high' ? 'badge-danger' : 'badge-warn'}">${act.priority.toUpperCase()}</span></td>
+          <td>${act.target}</td>
+          <td><strong>${act.recommendation}</strong><div class="muted">${act.reason}</div></td>
+        </tr>
+      `).join('');
+
+      document.getElementById('ai-summary-area').innerHTML = `
+        <div class="alert alert-warn"><strong>Early Warning:</strong> ${data.early_warning_headline}</div>
+        <h3 style="margin-top:16px;font-size:0.98rem;">Temuan Pola (Insights)</h3>
+        ${insightCards || '<p class="muted">Tidak ditemukan anomali kehadiran.</p>'}
+        <h3 style="margin-top:18px;font-size:0.98rem;">Rekomendasi Tindakan (Actions)</h3>
+        <table>
+          <thead><tr><th>Prioritas</th><th>Target</th><th>Rekomendasi</th></tr></thead>
+          <tbody>${actionRows || '<tr><td colspan="3" class="muted">Tidak ada tindakan mendesak.</td></tr>'}</tbody>
+        </table>
+      `;
+      document.getElementById('ai-json-raw').textContent = JSON.stringify(data, null, 2);
+    }
+
+    loadMeta();
+  </script>
+</body>
+</html>
